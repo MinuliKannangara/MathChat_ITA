@@ -1,0 +1,7 @@
+"Remember, there are some common mistakes students make when solving algebraic problems:\n"
+        "1. Be careful with the signs when performing multiplication or division. For example, (+ x - = -) and (- x - "
+        "= +).\n"
+        "2. When solving equations like 3x = 10, remember you need to divide by 3 to solve for x, not subtract 3.\n"
+        "3. Pay attention to negative signs during operations like -3a = 6. When dividing, remember the sign matters.\n"
+        "4. When dealing with subtraction like -9 + 2, do the subtraction and assign the sign of the larger number.\n"
+        "5. If you see fractions like 1/4 + 3, convert the whole number to have a common denominator before adding.\n"

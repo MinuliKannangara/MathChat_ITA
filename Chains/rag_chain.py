@@ -7,6 +7,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 def create_rag_chain(pdf_path, embedding_model, llm, chunk_size=400, chunk_overlap=50):
+    print("inside createw rag chain")
     # Step 1: Load the PDF document (Syllabus)
     loader = PyPDFLoader("C:/Users/Minuli/PycharmProjects/MathChat/Algebraic_expressions.pdf")
     docs = loader.load()

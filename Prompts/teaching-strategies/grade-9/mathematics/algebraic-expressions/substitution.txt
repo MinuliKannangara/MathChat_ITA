@@ -1,0 +1,4 @@
+"This is a substitution problem. First, let’s make sure you understand how to read the expression.\n"
+            "For example, in 3x + 3 = 10, it means 'x' is multiplied by 3, and then 3 is added to the result, "
+            "making it equal to 10.\n"
+            "Make sure you understand how to interpret the equation before substituting values."

@@ -1,65 +1,113 @@
+import os
 from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
-
 from Configs.config import settings
 import chainlit as cl
 
 model = ChatOpenAI(model=settings.MODEL_NAME, streaming=True)
-session_id = settings.SESSION_ID
-store = {}
+
+# Store for chat histories
+chat_histories = {}
+base_path = "Prompts"
 
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    print("inside get_session_history")
-    if session_id not in store:
-        store[session_id] = InMemoryChatMessageHistory()
-    return store[session_id]
+    if session_id not in chat_histories:
+        chat_histories[session_id] = InMemoryChatMessageHistory()
+    return chat_histories[session_id]
 
+
+def load_prompt(base_path, grade, subject, topic, sub_topic, prompt_type):
+    """
+    Load the appropriate prompt template based on the provided grade, subject, topic, and prompt type.
+    """
+
+    # Handle the common mistake correction type differently due to its folder structure
+    if prompt_type == "common-mistake-corrections":
+        prompt_file_path = os.path.join(base_path, prompt_type, subject, f"{topic}.txt")
+    else:
+        prompt_file_path = os.path.join(base_path, prompt_type, grade, subject, topic, f"{sub_topic}.txt")
+
+    if os.path.exists(prompt_file_path):
+        with open(prompt_file_path, 'r') as file:
+            prompt_data = file.read()
+            return prompt_data
+    else:
+        return None
+
+
+# Path to the general guidance file
+guidance_path = "Prompts/common-guidance/general-guidance.txt"
+common_mistakes_path = ""
+# Load general guidance content
+guidance_data = ""
+if not os.path.exists(guidance_path):
+    guidance_data = "Prompt not found"
+else:
+    with open(guidance_path, 'r') as file:
+        guidance_data = file.read()
+
+
+def get_session_history(session_id: str) -> BaseChatMessageHistory:
+    if session_id not in chat_histories:
+        chat_histories[session_id] = InMemoryChatMessageHistory()
+    return chat_histories[session_id]
+
+def identify_subtopic(base_path,grade, subject, topic,prompt_type):
+
+    prompt_file_path = os.path.join(base_path, prompt_type,grade, subject, f"{topic}.txt")
 
 def guide_student(summary, student_input):
     # Use the summary content directly in the system prompt to help guide the student.
+    session_id = cl.user_session.get("id")
     print("inside guide_student")
+
+    # Extract relevant subtopics from the summary
+    subtopic = None
+    if "Subtopics:" in summary:
+        subtopic_parts = summary.split("Subtopics:")
+        if len(subtopic_parts) > 1:
+            subtopic_line = subtopic_parts[1].strip().split("\n")[0]
+            if subtopic_line:
+                subtopic = subtopic_line
+    if not subtopic:
+        subtopic = "General"  # Default case if subtopic extraction fails
+    print("guidance data----------------" + guidance_data)
+    # Common Guidance: Applicable to all subtopics
+    common_guidance = guidance_data
+
+    # Common Mistake Corrections
+    common_mistake_corrections = (
+        load_prompt(base_path,"grade-9", "mathematics", "algebraic-expressions", "", "common-mistake-corrections")
+    )
+
+    # Subtopic-Specific Guidance
+    subtopic_specific_guidance = load_prompt(base_path,"grade-9", "mathematics", "algebraic-expressions", subtopic, "teaching-strategies")
+
+    # Combine common and subtopic-specific guidance
+    full_guidance_prompt = (
+            common_guidance + "\n\n" +
+            subtopic_specific_guidance + "\n\n" +
+            common_mistake_corrections
+    )
+
+    # Generate response using the combined prompt
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
                 f"""You are an intelligent tutoring assistant (ITA) helping a Grade 9 student in Sri Lanka solve 
-                mathematics problems based on their school syllabus. Your role is to guide the student through the 
-                problem-solving process step by step, without directly providing the solution. Always respond with a 
-                question or prompt to encourage the student's independent thinking.
+                   mathematics problems based on their school syllabus. Your role is to guide the student through the 
+                   problem-solving process step by step, without directly providing the solution. Always respond with a 
+                   question or prompt to encourage the student's independent thinking.
 
-                Below is a summary of the student's problem and the steps involved in solving it. First, identify the 
-                question posed by the student. Then, use the information from the syllabus to guide the student, 
-                ensuring that your guidance adheres to the syllabus and follows these guidelines:
-
-                Summary of the problem, syllabus content and steps to solve it:
-                {summary}
-
-                Guidelines:
-                1. Start by asking a suitable question to start the conversation with the student based on the given 
-                problem.
-                2. Ask the student if they have any initial thoughts on how to approach the problem. If they do, 
-                   guide them based on their thoughts. If not, provide a hint or explain a relevant concept.
-                3. Guide the student to identify the steps needed, one at a time, by asking questions.
-                4. If the student suggests an incorrect step, don't directly correct them. Instead, ask them to 
-                reconsider 
-                   or provide a hint that leads them to the correct approach.
-                5. If the student is stuck, explain the relevant mathematical concepts with simple examples before 
-                   returning to the problem.
-                6. After each step, ask what they think should be done next.
-                7. Provide positive reinforcement for correct steps and good reasoning.
-                8. Never solve any part of the problem directly. Always ask the student to perform the calculations 
-                   and explain their thinking.
-                9. Keep track of the conversation history and avoid repeating questions that have already been answered.
-
-                Remember, your role is to guide and prompt, not to solve. Always respond with a question or a prompt that 
-                encourages the student to think and take the next step in solving the problem.""",
+                   Summary of the problem, syllabus content and steps to solve it:
+                   {summary} """
             ),
             MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
+            ("human", full_guidance_prompt),
         ]
     )
-
     chat_history = get_session_history(session_id)
 
     chain = prompt | model

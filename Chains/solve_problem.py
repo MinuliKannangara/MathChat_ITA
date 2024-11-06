@@ -32,27 +32,64 @@ def solve_problem(user_question):
 
     # Define the node functions
     def reasoning(state):
+        print("def 1 ---------------")
         messages = state['messages']
         user_input = messages[-1]
 
-        # Prompt refined for clarity and meaning
+        # Modified prompt to identify subtopics from syllabus content
         complete_query = (
-            f"Analyze the student's problem and establish a clear objective. Use relevant theories and concepts from "
-            f"the syllabus ({syllabus_response_content}) to guide your reasoning."
-            f"Ensure that the reasoning process follows the methods outlined in the syllabus and stays within the "
-            f"scope of the curriculum. Break the problem down into logical steps"
-            f"to guide the student through understanding how to approach and solve it. However, do not provide the "
-            f"final solution."
-            f"Focus on identifying and explaining the steps involved, whether the problem is a mathematical "
-            f"expression or a word problem."
+            f"Analyze the student's problem and provide a structured response. "
+            f"First, review the following syllabus content to identify the relevant subtopic(s) for this question:\n"
+            f"{syllabus_response_content}\n\n"
+            f"Format your response as follows:\n"
+            "---SUBTOPIC---\n"
+            "<Identify and list the relevant subtopic(s) from the syllabus that this specific question belongs to>\n"
+            "---ANALYSIS---\n"
+            "<Your detailed analysis and guidance>\n\n"
+            f"When providing analysis:\n"
+            f"1. Use relevant theories and concepts from the syllabus\n"
+            f"2. Follow the methods outlined in the syllabus\n"
+            f"3. Break down the logical steps needed\n"
+            f"4. Do not provide the final solution\n"
+            f"5. Focus on explaining the approach\n\n"
             f"User's query: {user_input}"
         )
 
         response = model.invoke(complete_query)
-        state['messages'].append(response.content)
+
+        # Parse the structured response
+        content = response.content if hasattr(response, 'content') else ""
+        relevant_subtopics = []
+        analysis = ""
+
+        # Extract information using string parsing
+        if content:
+            sections = content.split("---")
+            for section in sections:
+                section_title = section.strip().split("\n")[0].strip().upper() if section.strip() else ""
+                if "SUBTOPIC" in section_title:
+                    # Extract relevant subtopics, handling both single and multiple subtopics
+                    subtopic_lines = section.strip().split("\n")
+                    if len(subtopic_lines) > 1:
+                        subtopic_text = subtopic_lines[1].strip()
+                        relevant_subtopics = [topic.strip() for topic in subtopic_text.split(",") if topic.strip()]
+                elif "ANALYSIS" in section_title:
+                    analysis_lines = section.strip().split("\n", 1)
+                    if len(analysis_lines) > 1:
+                        analysis = analysis_lines[1].strip()
+
+        # Update state with new information
+        if analysis:
+            state['messages'].append(analysis)
+        else:
+            state['messages'].append("I couldn't find a clear analysis. Let's try a different approach.")
+
+        state['relevant_subtopics'] = relevant_subtopics if relevant_subtopics else ["General"]
+
         return state
 
     def condition(state):
+        print("def 2 ---------------")
         messages = state['messages']
         reasoning_data = messages[-1]
         math_problem = messages[0]
@@ -65,6 +102,7 @@ def solve_problem(user_question):
         return state
 
     def judge(state):
+        print("def 3 ---------------")
         messages = state['messages']
         reasoning_data = messages[1]
         math_problem = messages[0]
@@ -79,6 +117,7 @@ def solve_problem(user_question):
         return state
 
     def newCondition(state):
+        print("def 4 ---------------")
         messages = state['messages']
         reasoning_data = messages[1]
         math_problem = messages[0]
@@ -95,6 +134,7 @@ def solve_problem(user_question):
         return state
 
     def algebraic_solver(state):
+        print("def 5 ---------------")
         messages = state['messages']
         problem = messages[0]
         reasoning_data = messages[1]
@@ -131,24 +171,45 @@ def solve_problem(user_question):
         return state
 
     def summarize(state):
+        print("def 6 ---------------")
         messages = state['messages']
-        problem = messages[0]
-        reasoning_data = messages[1]
-        refined_conditions = messages[4]
-        solution = messages[-1]
+
+        # Ensure there are enough messages to avoid indexing errors
+        if len(messages) < 5:
+            state['messages'].append(
+                "I couldn't find enough information to create a summary. Let's revisit the problem.")
+            return state
+
+        # Convert all message components to strings to avoid type errors
+        problem = str(messages[0])
+        reasoning_data = str(messages[1])
+        refined_conditions = str(messages[4])
+        solution = str(messages[-1])
+        sub_topics = ', '.join(state['relevant_subtopics']) if 'relevant_subtopics' in state else "General"
+
         summary_prompt = f"""
         Summarize the algebraic problem-solving process:
 
         Original problem: {problem}
-        syllabus_content:{syllabus_response_content}
+        syllabus_content: {syllabus_response_content}
         Reasoning: {reasoning_data}
         Conditions: {refined_conditions}
         Solution: {solution}
+        Subtopics: {sub_topics}
 
-        Provide a step-by-step explanation of how we arrived at the final answer.
+        Provide a step-by-step explanation of how we arrived at the final answer. Add the subtopics to the summary as well.
         """
+
         response = model.invoke(summary_prompt)
-        state['messages'].append(response.content)
+        response_content = response.content if hasattr(response, 'content') else str(response)
+        print("summary in summary function ---------------" + response_content)
+
+        # Append the response content to the messages if it's available
+        if response_content:
+            state['messages'].append(response_content)
+        else:
+            state['messages'].append("I couldn't generate a summary. Let's try a different approach.")
+
         return state
 
     # Define the Langchain graph
@@ -172,8 +233,8 @@ def solve_problem(user_question):
     workflow.set_finish_point("summarize")
 
     app = workflow.compile()
-
-    result = app.invoke({"messages": ["solve m when 2m+1=9"]})
+    print(app.get_graph().draw_mermaid())
+    result = app.invoke({"messages": [user_question]})
     print(result)
 
     # Return the final summary
