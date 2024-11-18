@@ -1,49 +1,29 @@
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langgraph.graph import Graph
-
 from Chains.rag_chain import create_rag_chain
 from Configs.config import settings
 from sympy import *
 
 model = ChatOpenAI(model=settings.MODEL_NAME, streaming=True)
-# Initialize the embedding model
-embedding_model = OpenAIEmbeddings(model=settings.EMBEDDING_MODEL)
 
-def solve_problem(user_question):
+
+def solve_problem(user_question, pdf_file_path, sub_topic, syllabus_response_content):
     # Define AgentState
     AgentState = {"messages": []}
 
     print("inside solve_problem")
 
-    # Initialize the RAG chain for syllabus retrieval
-    rag_chain = create_rag_chain(
-        pdf_path="path_to_syllabus.pdf",
-        embedding_model=embedding_model,
-        llm=model
-    )
-
-    # Step 1: Use the RAG chain to retrieve syllabus content related to the student's question
-    syllabus_response = rag_chain.invoke({"input": user_question})
-
-    if isinstance(syllabus_response, dict) and 'content' in syllabus_response:
-        syllabus_response_content = syllabus_response['content']
-    else:
-        syllabus_response_content = "Unable to retrieve syllabus content."
-
-    # Define the node functions
     def reasoning(state):
         print("def 1 ---------------")
         messages = state['messages']
         user_input = messages[-1]
 
-        # Modified prompt to identify subtopics from syllabus content
+        # Modified prompt to analyze the student's question and provide guidance
         complete_query = (
             f"Analyze the student's problem and provide a structured response. "
             f"First, review the following syllabus content to identify the relevant subtopic(s) for this question:\n"
             f"{syllabus_response_content}\n\n"
             f"Format your response as follows:\n"
-            "---SUBTOPIC---\n"
-            "<Identify and list the relevant subtopic(s) from the syllabus that this specific question belongs to>\n"
             "---ANALYSIS---\n"
             "<Your detailed analysis and guidance>\n\n"
             f"When providing analysis:\n"
@@ -52,39 +32,24 @@ def solve_problem(user_question):
             f"3. Break down the logical steps needed\n"
             f"4. Do not provide the final solution\n"
             f"5. Focus on explaining the approach\n\n"
-            f"User's query: {user_input}"
+            f"User's query: {user_question}"
         )
 
         response = model.invoke(complete_query)
 
-        # Parse the structured response
+        # Extract response content
         content = response.content if hasattr(response, 'content') else ""
-        relevant_subtopics = []
         analysis = ""
 
-        # Extract information using string parsing
+        # Check if content exists and extract the analysis
         if content:
-            sections = content.split("---")
-            for section in sections:
-                section_title = section.strip().split("\n")[0].strip().upper() if section.strip() else ""
-                if "SUBTOPIC" in section_title:
-                    # Extract relevant subtopics, handling both single and multiple subtopics
-                    subtopic_lines = section.strip().split("\n")
-                    if len(subtopic_lines) > 1:
-                        subtopic_text = subtopic_lines[1].strip()
-                        relevant_subtopics = [topic.strip() for topic in subtopic_text.split(",") if topic.strip()]
-                elif "ANALYSIS" in section_title:
-                    analysis_lines = section.strip().split("\n", 1)
-                    if len(analysis_lines) > 1:
-                        analysis = analysis_lines[1].strip()
+            analysis = content.strip()
 
         # Update state with new information
         if analysis:
             state['messages'].append(analysis)
         else:
             state['messages'].append("I couldn't find a clear analysis. Let's try a different approach.")
-
-        state['relevant_subtopics'] = relevant_subtopics if relevant_subtopics else ["General"]
 
         return state
 
@@ -185,17 +150,14 @@ def solve_problem(user_question):
         reasoning_data = str(messages[1])
         refined_conditions = str(messages[4])
         solution = str(messages[-1])
-        sub_topics = ', '.join(state['relevant_subtopics']) if 'relevant_subtopics' in state else "General"
 
         summary_prompt = f"""
         Summarize the algebraic problem-solving process:
 
         Original problem: {problem}
-        syllabus_content: {syllabus_response_content}
         Reasoning: {reasoning_data}
         Conditions: {refined_conditions}
         Solution: {solution}
-        Subtopics: {sub_topics}
 
         Provide a step-by-step explanation of how we arrived at the final answer. Add the subtopics to the summary as well.
         """

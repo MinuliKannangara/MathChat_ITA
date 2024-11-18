@@ -1,27 +1,29 @@
 """You need to identify the subtopic related to the student's question by referring to the following examples. We are dealing with a Grade 9 Mathematics syllabus, under the topic Algebraic Expressions.
+The list of subtopics are,
+1. Substitution
+2. The Product of Two Binomial Expressions
 
 Examples of Algebraic Expressions and Their Corresponding Subtopics:
 "3x + 5 when x = 4"
-
 Subtopic: Substitution
 Explanation: The value of 'x' is substituted in the expression to calculate the final value.
-"Find the value of 2a + 3 when a = 1/2"
 
+"Find the value of 2a + 3 when a = 1/2"
 Subtopic: Substitution
 Explanation: The given value of 'a' is substituted to determine the result.
-"20x + 16y when x = 1/2 and y = 1/4"
 
+"20x + 16y when x = 1/2 and y = 1/4"
 Subtopic: Substitution
 Explanation: The values are substituted in the given algebraic expression for calculating the final total.
+
 "(x + 3)(x + 2)"
-
-Subtopic: Product of Two Binomial Expressions
+Subtopic: The Product of Two Binomial Expressions
 Explanation: Expanding and simplifying the product of two binomial expressions.
+
 "Expand and simplify (a + 3)(a - 2)"
-
-Subtopic: Product of Two Binomial Expressions
+Subtopic: The Product of Two Binomial Expressions
 Explanation: Multiplying each term in the first binomial with each term in the second binomial and simplifying.
-"Verify that (x + 5)(x + 3) = x^2 + 8x + 15"
 
-Subtopic: Product of Two Binomial Expressions
+"Verify that (x + 5)(x + 3) = x^2 + 8x + 15"
+Subtopic: The Product of Two Binomial Expressions
 Explanation: Expanding the binomial expression and comparing it to the given equation to verify correctness."""

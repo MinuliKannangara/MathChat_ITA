@@ -1,128 +1,101 @@
-import os
-from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from typing import List, Dict
 from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from Configs.config import settings
-import chainlit as cl
+from Chains.load_prompt import load_prompt
+import streamlit as st
 
+# Initialize the OpenAI model
 model = ChatOpenAI(model=settings.MODEL_NAME, streaming=True)
 
-# Store for chat histories
-chat_histories = {}
-base_path = "Prompts"
 
-def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    if session_id not in chat_histories:
-        chat_histories[session_id] = InMemoryChatMessageHistory()
-    return chat_histories[session_id]
+def assess_student_proficiency(chat_history: List[Dict[str, str]]) -> str:
+    """Determine the student's proficiency based on recent chat history."""
+    if not chat_history:
+        return "beginner"
 
+    recent_responses = chat_history[-3:]
+    if all("correct" in entry["content"].lower() or "great job" in entry["content"].lower() for entry in
+           recent_responses):
+        return "advanced"
+    elif any("struggling" in entry["content"].lower() or "confusing" in entry["content"].lower() for entry in
+             recent_responses):
+        return "beginner"
 
-def load_prompt(base_path, grade, subject, topic, sub_topic, prompt_type):
-    """
-    Load the appropriate prompt template based on the provided grade, subject, topic, and prompt type.
-    """
-
-    # Handle the common mistake correction type differently due to its folder structure
-    if prompt_type == "common-mistake-corrections":
-        prompt_file_path = os.path.join(base_path, prompt_type, subject, f"{topic}.txt")
-    else:
-        prompt_file_path = os.path.join(base_path, prompt_type, grade, subject, topic, f"{sub_topic}.txt")
-
-    if os.path.exists(prompt_file_path):
-        with open(prompt_file_path, 'r') as file:
-            prompt_data = file.read()
-            return prompt_data
-    else:
-        return None
+    return "beginner"
 
 
-# Path to the general guidance file
-guidance_path = "Prompts/common-guidance/general-guidance.txt"
-common_mistakes_path = ""
-# Load general guidance content
-guidance_data = ""
-if not os.path.exists(guidance_path):
-    guidance_data = "Prompt not found"
-else:
-    with open(guidance_path, 'r') as file:
-        guidance_data = file.read()
+def generate_dynamic_guidance(proficiency: str, subtopic_specific_guidance: str) -> str:
+    """Generate guidance dynamically based on the student's proficiency level."""
+    if proficiency == "beginner":
+        return f"Let's take it step-by-step. {subtopic_specific_guidance} Remember, take your time and ask questions if you're confused."
+    elif proficiency == "intermediate":
+        return f"You're doing well! {subtopic_specific_guidance} Let's try to solve this next step together."
+    elif proficiency == "advanced":
+        return f"Excellent! Since you're getting the hang of this, {subtopic_specific_guidance} Let's see if you can tackle this step without hints."
 
 
-def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    if session_id not in chat_histories:
-        chat_histories[session_id] = InMemoryChatMessageHistory()
-    return chat_histories[session_id]
+def guide_student(summary: str, student_input: str, lesson: str, subtopic: str, syllabus_response_content: str, chat_history: List[Dict[str, str]]) -> str:
+    """Guide the student based on input, lesson summary, and chat history."""
+    print("guide student")
+    # Load guidance content
+    guidance_data = load_prompt("", "mathematics", "", "", "common-guidance")
+    common_mistake_corrections = load_prompt("grade-9", "mathematics", lesson, "",
+                                             "common-mistake-corrections")
+    subtopic_specific_guidance = load_prompt("grade-9", "mathematics", lesson, subtopic,
+                                             "teaching-strategies")
 
-def identify_subtopic(base_path,grade, subject, topic,prompt_type):
+    # Assess student's proficiency level
+    student_proficiency = assess_student_proficiency(chat_history)
 
-    prompt_file_path = os.path.join(base_path, prompt_type,grade, subject, f"{topic}.txt")
+    print("student proficiency:", student_proficiency)
 
-def guide_student(summary, student_input):
-    # Use the summary content directly in the system prompt to help guide the student.
-    session_id = cl.user_session.get("id")
-    print("inside guide_student")
+    # Combine guidance prompts and dynamically adjust based on proficiency
+    dynamic_guidance_prompt = generate_dynamic_guidance(student_proficiency, subtopic_specific_guidance)
 
-    # Extract relevant subtopics from the summary
-    subtopic = None
-    if "Subtopics:" in summary:
-        subtopic_parts = summary.split("Subtopics:")
-        if len(subtopic_parts) > 1:
-            subtopic_line = subtopic_parts[1].strip().split("\n")[0]
-            if subtopic_line:
-                subtopic = subtopic_line
-    if not subtopic:
-        subtopic = "General"  # Default case if subtopic extraction fails
-    print("guidance data----------------" + guidance_data)
-    # Common Guidance: Applicable to all subtopics
-    common_guidance = guidance_data
+    print("dynamic guidance:", dynamic_guidance_prompt)
 
-    # Common Mistake Corrections
-    common_mistake_corrections = (
-        load_prompt(base_path,"grade-9", "mathematics", "algebraic-expressions", "", "common-mistake-corrections")
-    )
-
-    # Subtopic-Specific Guidance
-    subtopic_specific_guidance = load_prompt(base_path,"grade-9", "mathematics", "algebraic-expressions", subtopic, "teaching-strategies")
-
-    # Combine common and subtopic-specific guidance
+    # Combine all guidance prompts with common mistake corrections
     full_guidance_prompt = (
-            common_guidance + "\n\n" +
-            subtopic_specific_guidance + "\n\n" +
+            guidance_data + "\n\n" +
+            dynamic_guidance_prompt + "\n\n" +
             common_mistake_corrections
     )
 
-    # Generate response using the combined prompt
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                f"""You are an intelligent tutoring assistant (ITA) helping a Grade 9 student in Sri Lanka solve 
-                   mathematics problems based on their school syllabus. Your role is to guide the student through the 
-                   problem-solving process step by step, without directly providing the solution. Always respond with a 
-                   question or prompt to encourage the student's independent thinking.
+    # Create prompt template including chat history
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            f"""You are an intelligent tutoring assistant (ITA) helping a Grade 9 student in Sri Lanka solve 
+                mathematics problems based on their school syllabus. Your role is to guide the student through the 
+                problem-solving process step by step, without directly providing the solution. Always respond with a 
+                question or prompt to encourage the student's independent thinking.
+                
+                After the student solve the question and he provide the final correct answer, Always add the phrase 
+                "Great job! you did it!"
 
-                   Summary of the problem, syllabus content and steps to solve it:
-                   {summary} """
-            ),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", full_guidance_prompt),
-        ]
-    )
-    chat_history = get_session_history(session_id)
+                {full_guidance_prompt}
+                
+                Syllabus content to refer when guide the student:
+                {syllabus_response_content}
 
+                Summary of the problem, syllabus content, and steps to solve it:
+                {summary}"""
+        ),
+        # Include past interactions from chat history to provide context
+        MessagesPlaceholder(variable_name="chat_history"),
+        # Current student input
+        ("human", student_input)
+    ])
+
+    # Generate response using chat history
+    chat_history_messages = [{"role": entry["role"], "content": entry["content"]} for entry in chat_history]
     chain = prompt | model
 
-    cl.user_session.set("chain", chain)
-
+    # Invoke the chain to generate the response with chat history as context
     response = chain.invoke({
         "input": student_input,
-        "chat_history": chat_history.messages
+        "chat_history": chat_history_messages
     })
-
-    # Add the student's input and the assistant's response to the chat history
-    chat_history.add_user_message(student_input)
-    chat_history.add_ai_message(response.content)
-
-    print("Guide response: " + response.content)
 
     return response.content

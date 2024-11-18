@@ -3,13 +3,17 @@ from langchain.chains.retrieval import create_retrieval_chain
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from Configs.config import settings
 
-def create_rag_chain(pdf_path, embedding_model, llm, chunk_size=400, chunk_overlap=50):
-    print("inside createw rag chain")
+
+def create_rag_chain(pdf_file_path, llm, embedding_model, chunk_size=400, chunk_overlap=50):
+
+    print("inside create rag chain")
     # Step 1: Load the PDF document (Syllabus)
-    loader = PyPDFLoader("C:/Users/Minuli/PycharmProjects/MathChat/Algebraic_expressions.pdf")
+    loader = PyPDFLoader(pdf_file_path)
     docs = loader.load()
 
     # Step 2: Initialize the text splitter
